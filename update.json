@@ -1,1 +1,5 @@
-
+{
+    "version": "1.5.0",
+    "changelog": "- تمت إضافة قراء جدد.\n- تحسينات على واجهة المستخدم.",
+    "script_url": "https://raw.githubusercontent.com/popking159/buttonpatcher/main/myinstaller.sh"
+}
