@@ -2,13 +2,13 @@
 
 # wget -qO - https://raw.githubusercontent.com/popking159/buttonpatcher/refs/heads/main/myinstaller.sh | /bin/sh
 # =========================================================================
-# CONFIGURATION (Change these for different repositories)
+# CONFIGURATION
 # =========================================================================
 PLUGIN_NAME="Button Patcher"
 USERNAME="popking159"
 REPO="buttonpatcher"
 
-# Dependencies are empty as buttonpatcher does not require any
+# Dependencies (empty as buttonpatcher does not require any external libs)
 PY_DEPENDS=""
 SYS_DEPENDS=""
 # =========================================================================
@@ -16,11 +16,11 @@ SYS_DEPENDS=""
 # Workspace paths
 TMP_DIR="/var/volatile/tmp"
 [ -d "$TMP_DIR" ] || TMP_DIR="/tmp"
-TMP_FILE="$TMP_DIR/main_install.tar.gz"
 
 PKG_MANAGER=""
 PYTHON_BIN="python"
 PY_VER_SUFFIX=""
+DETECTED_ARCH=""
 FINAL_DEPENDS=""
 
 log() {
@@ -70,7 +70,28 @@ elif has_cmd apt-get; then
 fi
 log "[INFO] Package manager detected: ${PKG_MANAGER:-None}"
 
-# 2. Detect Exact Python Version (e.g., extracts '313' from 3.13.x)
+# 2. Detect CPU Architecture
+if [ -f /etc/opkg/arch.conf ]; then
+    ARCH_DATA=$(cat /etc/opkg/arch.conf)
+elif has_cmd opkg; then
+    ARCH_DATA=$(opkg print-architecture 2>/dev/null)
+else
+    ARCH_DATA=""
+fi
+
+if echo "$ARCH_DATA" | grep -q "cortexa15hf-neon-vfpv4"; then
+    DETECTED_ARCH="cortexa15hf-neon-vfpv4"
+elif echo "$ARCH_DATA" | grep -q "aarch64" || [ "$(uname -m)" = "aarch64" ]; then
+    DETECTED_ARCH="aarch64"
+elif echo "$ARCH_DATA" | grep -q "armv7ahf-neon" || echo "$(uname -m)" | grep -q "armv7"; then
+    DETECTED_ARCH="armv7ahf-neon"
+else
+    # Fallback to raw uname architecture
+    DETECTED_ARCH="$(uname -m)"
+fi
+log "[INFO] Detected Architecture: $DETECTED_ARCH"
+
+# 3. Detect Exact Python Version (e.g., extracts '313' from 3.13.x, '314' from 3.14.x)
 if has_cmd python3; then
     PYTHON_BIN="python3"
     PY_PREFIX="python3-"
@@ -82,10 +103,12 @@ elif has_cmd python; then
 fi
 log "[INFO] Detected Python Version Suffix: $PY_VER_SUFFIX"
 
-# 3. Dynamically Construct URL based on detected Python Version
-PLUGIN_URL="https://github.com/${USERNAME}/${REPO}/raw/refs/heads/main/main_${PY_VER_SUFFIX}.tar.gz"
+# 4. Dynamically Construct URL and Archive Name
+TARGET_ARCHIVE="ButtonPatcher_${DETECTED_ARCH}_${PY_VER_SUFFIX}.tar.gz"
+PLUGIN_URL="https://github.com/${USERNAME}/${REPO}/raw/refs/heads/main/${TARGET_ARCHIVE}"
+TMP_FILE="$TMP_DIR/$TARGET_ARCHIVE"
 
-# 4. Build the Final Dependency List
+# 5. Build the Final Dependency List
 for dep in $PY_DEPENDS; do
     FINAL_DEPENDS="$FINAL_DEPENDS ${PY_PREFIX}${dep}"
 done
@@ -93,7 +116,7 @@ for dep in $SYS_DEPENDS; do
     FINAL_DEPENDS="$FINAL_DEPENDS $dep"
 done
 
-# 5. Update Package Feeds (Skipped if no dependencies)
+# 6. Update Package Feeds (Skipped if no dependencies)
 if [ -n "$FINAL_DEPENDS" ] && [ -n "$PKG_MANAGER" ]; then
     if [ "$PKG_MANAGER" = "opkg" ]; then
         log "[INFO] Updating opkg feeds..."
@@ -104,7 +127,7 @@ if [ -n "$FINAL_DEPENDS" ] && [ -n "$PKG_MANAGER" ]; then
     fi
 fi
 
-# 6. Check and Download Dependencies
+# 7. Check and Install Dependencies
 if [ -n "$FINAL_DEPENDS" ]; then
     log "[INFO] Verifying required dependencies..."
     for pkg in $FINAL_DEPENDS; do
@@ -127,21 +150,21 @@ if [ -n "$FINAL_DEPENDS" ]; then
         fi
     done
 else
-    log "[INFO] No dependencies specified in configuration. Skipping dependency phase."
+    log "[INFO] No dependencies specified. Skipping dependency phase."
 fi
 
-# 7. Download Version-Specific Plugin Archive
-log "[INFO] Fetching target archive: main_${PY_VER_SUFFIX}.tar.gz"
+# 8. Download Architecture & Version Specific Plugin Archive
+log "[INFO] Fetching target archive: $TARGET_ARCHIVE"
 rm -f "$TMP_FILE"
 wget -q --no-check-certificate "$PLUGIN_URL" -O "$TMP_FILE"
 
 if [ ! -s "$TMP_FILE" ]; then
-    log "[ERROR] Download failed! Archive 'main_${PY_VER_SUFFIX}.tar.gz' does not exist on the repository for this Python version."
+    log "[ERROR] Download failed! Archive '$TARGET_ARCHIVE' does not exist on the repository."
     rm -f "$TMP_FILE"
     exit 1
 fi
 
-# 8. Extract directly to ROOT (/)
+# 9. Extract directly to ROOT (/)
 log "[INFO] Extracting payload contents to system paths..."
 tar -xzf "$TMP_FILE" -C /
 if [ $? -ne 0 ]; then
