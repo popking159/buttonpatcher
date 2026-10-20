@@ -13,6 +13,13 @@ PY_DEPENDS=""
 SYS_DEPENDS=""
 # =========================================================================
 
+# Terminal Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
 # Workspace paths
 TMP_DIR="/var/volatile/tmp"
 [ -d "$TMP_DIR" ] || TMP_DIR="/tmp"
@@ -24,7 +31,14 @@ DETECTED_ARCH=""
 FINAL_DEPENDS=""
 
 log() {
-    echo "$1"
+    # Automatically colorize based on the log tag
+    case "$1" in
+        *\[INFO\]*) echo -e "${CYAN}$1${NC}" ;;
+        *\[OK\]*) echo -e "${GREEN}$1${NC}" ;;
+        *\[WARN\]*) echo -e "${YELLOW}$1${NC}" ;;
+        *\[ERROR\]*) echo -e "${RED}$1${NC}" ;;
+        *) echo -e "$1" ;;
+    esac
 }
 
 has_cmd() {
@@ -48,19 +62,9 @@ is_pkg_installed() {
     return 1
 }
 
-restart_enigma2() {
-    log "[INFO] Restarting Enigma2 UI..."
-    sleep 2
-    if [ -f /usr/bin/systemctl ]; then
-        systemctl restart enigma2
-    else
-        init 4 && sleep 2 && init 3 || killall -9 enigma2 >/dev/null 2>&1
-    fi
-}
-
-echo "===================================================="
-echo "         $PLUGIN_NAME INSTALLER UTILITY            "
-echo "===================================================="
+echo -e "${GREEN}====================================================${NC}"
+echo -e "${GREEN}         $PLUGIN_NAME INSTALLER UTILITY             ${NC}"
+echo -e "${GREEN}====================================================${NC}"
 
 # 1. Detect Package Manager Environment
 if has_cmd opkg; then
@@ -116,18 +120,7 @@ for dep in $SYS_DEPENDS; do
     FINAL_DEPENDS="$FINAL_DEPENDS $dep"
 done
 
-# 6. Update Package Feeds (Skipped if no dependencies)
-if [ -n "$FINAL_DEPENDS" ] && [ -n "$PKG_MANAGER" ]; then
-    if [ "$PKG_MANAGER" = "opkg" ]; then
-        log "[INFO] Updating opkg feeds..."
-        opkg update >/dev/null 2>&1 || log "[WARN] opkg update failed, continuing..."
-    elif [ "$PKG_MANAGER" = "apt" ]; then
-        log "[INFO] Updating apt feeds..."
-        apt-get update >/dev/null 2>&1 || log "[WARN] apt update failed, continuing..."
-    fi
-fi
-
-# 7. Check and Install Dependencies
+# 6. Check and Install Dependencies
 if [ -n "$FINAL_DEPENDS" ]; then
     log "[INFO] Verifying required dependencies..."
     for pkg in $FINAL_DEPENDS; do
@@ -153,7 +146,7 @@ else
     log "[INFO] No dependencies specified. Skipping dependency phase."
 fi
 
-# 8. Download Architecture & Version Specific Plugin Archive
+# 7. Download Architecture & Version Specific Plugin Archive
 log "[INFO] Fetching target archive: $TARGET_ARCHIVE"
 rm -f "$TMP_FILE"
 wget -q --no-check-certificate "$PLUGIN_URL" -O "$TMP_FILE"
@@ -164,7 +157,7 @@ if [ ! -s "$TMP_FILE" ]; then
     exit 1
 fi
 
-# 9. Extract directly to ROOT (/)
+# 8. Extract directly to ROOT (/)
 log "[INFO] Extracting payload contents to system paths..."
 tar -xzf "$TMP_FILE" -C /
 if [ $? -ne 0 ]; then
@@ -176,9 +169,8 @@ fi
 rm -f "$TMP_FILE"
 sync
 
-echo "===================================================="
-echo "          $PLUGIN_NAME INSTALLATION COMPLETE        "
-echo "===================================================="
+echo -e "${GREEN}====================================================${NC}"
+echo -e "${GREEN}         $PLUGIN_NAME INSTALLATION COMPLETE         ${NC}"
+echo -e "${GREEN}====================================================${NC}"
 
-restart_enigma2
 exit 0
